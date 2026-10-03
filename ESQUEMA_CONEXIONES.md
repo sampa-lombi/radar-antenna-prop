@@ -6,295 +6,286 @@
 - **Arduino**: Uno/Nano
 - **Servo**: MG995
 - **Módulos LED**: 2x módulos de 12V
-- **MOSFET**: IRF520N
+- **MOSFET**: IRF520N (o mejor: IRLZ44N, IRLZ34N)
 - **Resistencias**: 10kΩ (pull-down), 220Ω (gate)
 - **Capacitores**: 100µF (entrada/salida LM2596), 100nF (bypass)
-- **Fusibles**: 5A (entrada 12V), 2A (salida 5V)
+- **Fusibles**: 5A (entrada 12V)
 
 ---
 
-## Diagrama General con LM2596
+## Diagrama Simple - RECOMENDADO
 
 ```
-                    BATERÍA 12V AGM 7Ah
-                           |
-                           +========= FUSIBLE 5A
-                           |
-                 +-----+----+----+-----+
-                 |     |        |     |
-                 |     |        |     |
-            [LM2596]   |        |     |
-           12V→5V      |        |     |
-             |         |        |     |
-         +---+---+     |        |     |
-         |       |     |        |     |
-        GND     5V    GND      GND   +12V
-         |       |     |        |     |
-         |   +---+-----+---+    |     |
-         |   |   Arduino   |    |     |
-         |   |  D7  D9 5V  |    |     |
-         |   |   GND       |    |     |
-         |   +---+-----+---+    |     |
-         |       |     |        |     |
-         |     Servo  Servo    |     |
-         |      D9   Signal    |     |
-         |       |     |       |     |
-        GND     5V   Signal   GND   +12V
-         |       |     |        |     |
-         |     +-------+        |     |
-         |                      |     |
-         |   [MOSFET IRF520N]   |     |
-         |    Gate----D7        |     |
-         |    Source---+--------+-----+
-         |    Drain----+
-         |             |
-         +-----+-------+----------+
-               |                  |
-            (módulos LED 12V)     |
-             +---- |----+         |
-             |     |    |         |
-            +12V  -V   +12V------+
+               +12V BATERÍA
+                  |
+                  |
+       +----------+----------+
+       |                     |
+   LM2596 IN+             LED módulo (+)
+       |                     |
+   LM2596 IN- ------------- GND común
+       |
+   LM2596 OUT+ ----------+
+                         |
+                         ├------> Arduino 5V
+                         |
+                         └------> Servo VCC
+       
+   LM2596 OUT- ----------> Arduino GND
+                              |
+                              +------> Servo GND
+                              |
+                              +------> Servo Signal (D9)
+
+Arduino D7 ---- 220Ω ---- Gate MOSFET
+                          |
+                         10kΩ
+                          |
+                         GND
+
+MOSFET Source ------------ GND común
+MOSFET Drain ------------ LED módulo (-)
 ```
 
 ---
 
-## Esquema Detallado por Componentes
+## Tabla de Conexiones Pin a Pin
 
-### 1. CONVERTIDOR LM2596 (12V → 5V)
+| De | A | Cable | Notas |
+|---|---|-------|-------|
+| Batería +12V | LM2596 VIN | Rojo 16AWG | Fusible 5A en el camino |
+| Batería -12V | LM2596 GND | Negro 16AWG | GND común |
+| Batería +12V | LED módulo (+) | Rojo 16AWG | Alimentación directa |
+| LM2596 VOUT | Arduino 5V | Rojo 14AWG | Una sola línea |
+| LM2596 VOUT | Servo VCC | Rojo 14AWG | Compartida con Arduino |
+| LM2596 GND | Arduino GND | Negro 14AWG | Una sola línea |
+| LM2596 GND | Servo GND | Negro 14AWG | Compartida con Arduino |
+| Batería -12V | GND común | Negro 16AWG | Unión batería-Arduino-Servo |
+| Arduino D9 | Servo Signal | Naranja 18AWG | Control PWM servo |
+| Arduino D7 | 220Ω resistencia | Amarillo 18AWG | Gate MOSFET |
+| 220Ω resistencia | MOSFET Gate | Amarillo 18AWG | Control gate |
+| 10kΩ resistencia | MOSFET Gate | Naranja 18AWG | Pull-down |
+| 10kΩ resistencia | GND común | Negro 18AWG | Retorno pull-down |
+| MOSFET Source | GND común | Negro 16AWG | Retorno MOSFET |
+| MOSFET Drain | LED módulo (-) | Negro 16AWG | Control LED |
 
-```
-       BATERÍA 12V
-           |
-         +12V
-           |
-    ┌------+-------┐
-    |   LM2596     |
-    |   IN    GND  |
-    |    |     |   |
-    |    +-----+   |
-    |   VIN COM    |
-    └------+-------┘
-           |
-        +--+--+
-        |     |
-      100µF  100nF  ← Capacitores entrada
-        |     |
-        |    GND
-        |
-        +-------- ADJ (ajuste de voltaje)
-        |
-       10kΩ ← Resistencia de ajuste
-        |
-       2.2kΩ
-        |
-       GND
+---
 
+## Diagrama Detallado por Bloques
 
-    Salida:
-    ┌------+-------┐
-    |   LM2596     |
-    |   OUT  GND   |
-    |    |    |    |
-    |    +----+    |
-    |   VOUT COM   |
-    └------+-------┘
-           |
-        +--+--+
-        |     |
-      100µF  100nF  ← Capacitores salida
-        |     |
-        |    GND
-        |
-       +5V (hacia Arduino y Servo)
-```
-
-### 2. Conexión Arduino - Servo - LEDs
+### Bloque 1: Alimentación Principal (Batería → LM2596)
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        ARDUINO UNO/NANO                      │
-│                                                              │
-│  D7  ──────────────────┐                                    │
-│                        │                                    │
-│  D9  ──────────────────┼──────► Servo Signal                │
-│                        │                                    │
-│  5V  ──────────────────┼──────► Servo VCC + LM2596 Out     │
-│                        │                                    │
-│  GND ──────────────────┼──────► Servo GND + LM2596 Com     │
-│                        │                                    │
-└────────────────────────┼────────────────────────────────────┘
-                         │
-                    220Ω Resistencia
-                         │
-                    Gate IRF520N
-                         │
-                     10kΩ │ (pull-down)
-                         │
-                        GND
+    BATERÍA 12V AGM
+    
+    (+) positivo
+    │
+    +---- Fusible 5A ────┬────────────────────────+
+    │                    │                        │
+    └────────────────────┼────────────────────────┤
+                         │                        │
+                     LM2596 VIN+              LED (+)
+                     
+    (-) negativo
+    │
+    ├─────────────────────────────────────────────+
+    │                                             │
+    └──── LM2596 GND ────────────────────── GND común
 ```
 
-### 3. Circuito del MOSFET + LEDs
+### Bloque 2: Conversión 5V (LM2596)
 
 ```
-              +12V (desde batería)
-               │
-               ├──────────────────────────┐
-               │                          │
-             ╔═╧═╕    LED Módulo 1      ╔═╧═╕    LED Módulo 2
-             ║   │    (+12V → -V)       ║   │    (+12V → -V)
-             ║   │    ┌─────┐           ║   │    ┌─────┐
-             ╚═╤═╛    │ LED │           ╚═╤═╛    │ LED │
-               │      └─────┘             │      └─────┘
-               │         │                │         │
-               └────┬────┴────┬───────────┴────┬────┘
-                    │                         │
-                  (-)                        (-)
-                    │                         │
-                    └────────┬────────────────┘
-                             │
-                          Drain
-                        IRF520N
-                             │
-                    ┌─────────┴──────────┐
-                    │                    │
-                   Gate              Source
-                IRF520N             IRF520N
-                    │                    │
-                 220Ω                   GND
-                    │          (Common con batería)
+    LM2596 Buck Converter
+    
+    VIN (+) ──── 12V
+    GND (-)  ──── GND común
+    
+              ┌─────────────────┐
+              │ LM2596          │
+              │                 │
+    12V ──┤VIN+              │
+          │ ADJ               │
+          │ (ajuste con ────10kΩ/2.2kΩ)
+    GND ──┤GND      VOUT+ ├─┬─ 5V común
+              │                 │  para Arduino
+              └─────────────────┘  y Servo
+    
+    VOUT- ──── GND común
+```
+
+### Bloque 3: Arduino + Servo (5V)
+
+```
+    Arduino UNO/NANO
+    
+    ┌──────────────────────┐
+    │ ┌────────────────┐   │
+    │ │   USB/GND/5V   │   │
+    │ │                │   │
+    │ │  GND  5V  D9 D7│   │
+    │ │   |    |   |   |   │
+    │ └───┼────┼───┼───┼───┘
+    │     │    │   │   │
+    │   GND   5V   │   │
+    │     │    │   │   │
+    └─────┼────┼───┼───┼───────
+          │    │   │   │
+          │    │   │   └─── 220Ω ───┐
+          │    │   │                 │ Gate MOSFET
+          │    │   │                 │
+    ┌─────┼────┼───┼─────────────────┤
+    │     │    │   │      Arduino    │
+    │   GND   5V  D9                  │
+    │     │    │   │                 │
+    │   Servo Servo Servo            │
+    │   GND  VCC Signal              │
+    └─────────────────────────────────┘
+          │    │   │
+         GND  5V  Signal
+               (PWM)
+```
+
+### Bloque 4: Control de LEDs (MOSFET + LEDs 12V)
+
+```
+    Arduino D7 ──── 220Ω ──── Gate
+    
+    IRF520N
+    ┌──────────────────┐
+    │                  │
+    │  Gate ───────────┤─── De Arduino D7 (con 220Ω)
+    │                  │
+    │  Drain ──────────┤─── A LED módulo (-)
+    │                  │
+    │  Source ─────────┤─── A GND común
+    │                  │
+    └──────────────────┘
+          │
+         10kΩ (pull-down)
+          │
+         GND común
+    
+    LED módulo 12V
+    
+    (+) ──────────── +12V batería
+    (-) ──────────── Drain MOSFET
+```
+
+---
+
+## Orden de Conexión Recomendado
+
+1. **Conecta la batería a LM2596**
+   - Batería +12V → LM2596 VIN (con fusible 5A)
+   - Batería GND → LM2596 GND
+
+2. **Verifica salida de LM2596 con multímetro**
+   - VOUT debe ser ~5V
+   - Si no, ajusta potenciómetro LM2596
+
+3. **Conecta Arduino y Servo a 5V**
+   - LM2596 VOUT → Arduino 5V y Servo VCC (una sola línea)
+   - LM2596 GND → Arduino GND y Servo GND (una sola línea)
+
+4. **Conecta servo signal**
+   - Arduino D9 → Servo Signal
+
+5. **Conecta MOSFET y LEDs**
+   - Arduino D7 → 220Ω → Gate MOSFET
+   - 10kΩ pull-down entre Gate y GND
+   - MOSFET Source → GND común
+   - MOSFET Drain → LED (-)
+
+6. **Conecta LED (+) a batería +12V**
+
+7. **Verifica todas las conexiones antes de encender**
+
+---
+
+## Esquema ASCII Final Completo
+
+```
+                    ┌─── BATERÍA 12V AGM 7Ah ───┐
+                    │          (+) y (-)         │
+                    └───────────────────────────┘
+                           │         │
+                      Fusible 5A     │
+                           │         │
+                    ┌──────┴─────┐   │
+                    │  LM2596    │   │
+                    │ 12V→5V     │   │
+                    │            │   │
+            VIN+ ───┤            │   │
+            GND  ───┤            │ LED (+)
+            VOUT ───┼─────┬──────┘
+                    │     │
+                    │     ├──→ Arduino 5V
+                    │     │
+                    │     └──→ Servo VCC
                     │
-                Arduino D7
+            GND  ───┼─────┬──────→ Arduino GND
+                    │     │
+                    │     └──────→ Servo GND
+                    │
+                    └──────────────┬─────────────┐
+                                   │             │
+                            Arduino D9      Arduino D7
+                                   │             │
+                                   │          220Ω
+                                   │             │
+                            Servo Signal    Gate MOSFET
+                                           │
+                                          10kΩ (pull-down)
+                                           │
+                                           GND
+                                               
+                                      MOSFET Source → GND
+                                      MOSFET Drain → LED (-)
 ```
 
 ---
 
-## Tabla de Conexiones Completa
+## Configuración LM2596 para 5V
 
-| Componente | Pin/Patilla | Conexión | Notas |
-|-----------|-----------|----------|-------|
-| **Batería 12V** | (+) | → Fusible 5A → LM2596 VIN | Principal |
-| **Batería 12V** | (-) | → GND común | Retorno |
-| **LM2596** | VIN | ← Batería 12V (+) | Entrada |
-| **LM2596** | COM | ← Batería GND | Retorno entrada |
-| **LM2596** | VOUT | → Arduino 5V + Servo VCC | Salida 5V |
-| **LM2596** | COM (salida) | → Arduino GND + Servo GND | Retorno salida |
-| **LM2596** | ADJ | ← Divisor resistivo 10k/2.2k | Ajuste voltaje |
-| **Arduino** | D7 | → 220Ω → Gate IRF520N | Control MOSFET |
-| **Arduino** | D9 | → Servo Signal | Control servo |
-| **Arduino** | 5V | ← LM2596 VOUT | Alimentación |
-| **Arduino** | GND | ← LM2596 COM (salida) | Retorno |
-| **Servo MG995** | Signal | ← Arduino D9 | Señal PWM |
-| **Servo MG995** | VCC | ← LM2596 VOUT (5V) | Alimentación |
-| **Servo MG995** | GND | ← GND común | Retorno |
-| **IRF520N** | Gate | ← Arduino D7 (vía 220Ω) | Control |
-| **IRF520N** | Source | → GND común | Retorno |
-| **IRF520N** | Drain | → LED(-) | Salida |
-| **LED Módulos** | (+) | ← Batería 12V (+) | Alimentación |
-| **LED Módulos** | (-) | ← IRF520N Drain | Control vía MOSFET |
-| **Capacitores** | 100µF entrada | VIN a COM | Filtrado entrada |
-| **Capacitores** | 100nF entrada | VIN a COM | Bypass entrada |
-| **Capacitores** | 100µF salida | VOUT a COM | Filtrado salida |
-| **Capacitores** | 100nF salida | VOUT a COM | Bypass salida |
+El LM2596 viene con un potenciómetro integrado. Pasos para ajustar:
 
----
+1. Conecta multímetro entre VOUT y GND
+2. Enciende la batería
+3. Gira el potenciómetro del LM2596 hasta obtener 5.0V
+4. Verifica que sea estable (sin oscilaciones)
+5. Apaga y conecta Arduino
 
-## Configuración del LM2596 para 5V
-
-El LM2596 requiere un divisor resistivo en el pin ADJ para establecer el voltaje de salida:
-
-```
-Fórmula:
-VOUT = 1.23V × (1 + R1/R2)
-
-Para 5V:
-5 = 1.23 × (1 + R1/R2)
-R1/R2 = (5/1.23) - 1 = 3.065
-
-Valores comerciales recomendados:
+**Si usas resistencias fijas** (en lugar de potenciómetro):
 - R1 = 10kΩ (entre VOUT y ADJ)
-- R2 = 2.2kΩ (entre ADJ y GND)
-
-Verificación: 5V = 1.23 × (1 + 10/2.2) = 1.23 × 5.545 = 6.82V ← Muy alto
-
-Mejor opción:
-- R1 = 3.9kΩ
-- R2 = 2.2kΩ
-Resultado: 5V = 1.23 × (1 + 3.9/2.2) = 1.23 × 2.773 = 3.41V ← Bajo
-
-**Ideal:**
-- R1 = 10kΩ
-- R2 = 3.3kΩ
-Resultado: 5V = 1.23 × (1 + 10/3.3) = 1.23 × 4.03 = 4.96V ✓
-
-O usar potenciómetro de 10kΩ para ajuste fino.
-```
+- R2 = 3.3kΩ (entre ADJ y GND)
+- Resultado: ~5V
 
 ---
 
-## Diagrama ASCII Completo
+## Checklist Antes de Encender
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         SISTEMA COMPLETO RADAR PROP                    │
-└─────────────────────────────────────────────────────────────────────────┘
-
-                          ┌─── BATERÍA 12V AGM ───┐
-                          │      7Ah (±)          │
-                          ├───────────────────────┤
-                          │  + [Fusible 5A] - ─ ─ ├─────────────────┐
-                          └───────────────────────┘                 │
-                                   │                                │
-                         (12V +)   │                            (GND -)
-                                   │                                │
-                        ┌──────────┴──────────┐                    │
-                        │                     │                    │
-                     ┌──┴──┐              ┌──┴──┐                 │
-                     │LM2596           LED M1   │                 │
-                     │ IN  OUT          LED M2  │                 │
-                     │  |   |              │    │                 │
-                     │ VIN VOUT          +12V  │                 │
-                     │  |   |            Cátodo                  │
-                     └──┬──┬─────────────────┘                   │
-                        │  │         ↓                           │
-                        │  │    IRF520N Drain                    │
-                        │  │    (conectado a cátodo LED)         │
-                        │  │         │                           │
-                        │  │      ┌──┴───┐                       │
-                        │  │      │ Gate │ ← Arduino D7          │
-                        │  │      │      │   + 220Ω             │
-                        │  │      └──┬───┘                       │
-                        │  │         │                           │
-                        │  │      ┌──┴───┐                       │
-                        │  │      │Source│ ← GND                │
-                        │  │      └──┬───┘                       │
-                        │  │         │                           │
-    (5V)  ────────→ Arduino ←─ COM ←┘  ← (GND común)
-              D9→Servo      GND
-              D7→Gate       5V
-
-```
+- [ ] Batería desconectada
+- [ ] Todas las soldaduras bien hechas
+- [ ] No hay cortocircuitos entre +12V, +5V y GND
+- [ ] Fusible de 5A instalado
+- [ ] LM2596 VOUT verificado en 5V con multímetro
+- [ ] Arduino GND y Batería GND conectados (masa común)
+- [ ] Servo Signal en Arduino D9
+- [ ] MOSFET Gate en Arduino D7 (con 220Ω)
+- [ ] MOSFET Source en GND
+- [ ] MOSFET Drain en LED (-)
+- [ ] LED (+) en Batería +12V
+- [ ] Pull-down 10kΩ en Gate MOSFET
+- [ ] Código Arduino cargado y testeable
 
 ---
 
-## Verificación de Conexiones Antes de Encender
+## Notas de Seguridad
 
-- [ ] Fusible de 5A en línea de 12V positivo
-- [ ] LM2596 entrada: +12V y GND conectados correctamente
-- [ ] LM2596 salida: verificar 5V con multímetro antes de conectar Arduino
-- [ ] Capacitores electrolíticos en LM2596 (entrada y salida): positivo hacia VOUT
-- [ ] Arduino GND conectado a batería GND (masa común)
-- [ ] Servo: 3 cables correctos (Signal a D9, VCC a 5V, GND a GND)
-- [ ] MOSFET: Gate a D7 (vía 220Ω), Source a GND, Drain a LED(-)
-- [ ] Pull-down 10kΩ en Gate del MOSFET
-- [ ] LED módulos: (+) a 12V, (-) a Drain del MOSFET
-- [ ] Sin cortos entre +12V, +5V y GND
-
----
-
-## Notas Importantes
-
-1. **LM2596 es un convertidor buck muy eficiente** (~92-95%)
-2. **Disipación de calor**: con 2A de salida (10W) el chip se calienta pero no requiere disipador grande
-3. **Ruido**: los capacitores de entrada y salida son críticos para evitar oscilaciones
-4. **Protección contra inversión**: si conectas la batería al revés, el LM2596 puede dañarse
-5. **Tierra común**: SIEMPRE conecta GND de batería, Arduino, servo y MOSFET al mismo punto
+1. **Siempre verifica LM2596 antes de conectar Arduino**
+2. **Nunca toques componentes sin desconectar batería**
+3. **Revisa voltajes con multímetro en cada paso**
+4. **Si LM2596 calienta mucho, revisa configuración**
+5. **Usa fusible adecuado (5A) en línea de 12V**
+6. **Tierra común es crítica: une todos los GND en un punto**
